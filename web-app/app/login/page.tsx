@@ -2,7 +2,6 @@
 "use client";
 
 import { useState } from 'react';
-import axios, { AxiosError } from 'axios';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
 import { api } from '@/lib/api';
@@ -26,7 +25,7 @@ export default function LoginPage() {
       }
       alert('Login failed');
     }
-  };
+ 
 
   return (
     <form onSubmit={handleSubmit} className="max-w-md mx-auto mt-10">
