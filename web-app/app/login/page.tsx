@@ -22,14 +22,7 @@ export default function LoginPage() {
       login(token, userId);
       router.push('/');
     } catch (error) {
-      if (axios.isAxiosError(error as any) && (error as any).response) {
-        const axiosError = error as AxiosError;
-        console.error('Error response data:', axiosError.response?.data);
-        console.error('Error response status:', axiosError.response?.status);
-        if (axios.isAxiosError(error) && error.response?.status === 404) {
-          alert('Login endpoint not found (404). Please check the URL and server configuration.');
-          return;
-        }
+      console.log('Login error:', error);
       }
       alert('Login failed');
     }
