@@ -3,9 +3,9 @@ import { create } from 'zustand';
 
 interface AuthState {
   isAuthenticated: boolean;
-  userId: string | null;
+  userId: number | null;
   token: string | null;
-  login: (token: string, userId: string) => void;
+  login: (token: string, userId: number) => void;
   logout: () => void;
 }
 
