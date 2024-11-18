@@ -3,9 +3,9 @@ import { create } from 'zustand';
 
 interface AuthState {
   isAuthenticated: boolean;
-  userId: number | null;
+  userId: string | null;
   token: string | null;
-  login: (token: string, userId: number) => void;
+  login: (token: string, userId: string) => void;
   logout: () => void;
 }
 
@@ -13,7 +13,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   userId: null,
   token: null,
-  login: (token: string, userId: number) => {
+  login: (token: string, userId: string) => {
     localStorage.setItem('token', token);
     set({ isAuthenticated: true, userId, token });
   },

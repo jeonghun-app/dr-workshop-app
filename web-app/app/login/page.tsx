@@ -18,7 +18,7 @@ export default function LoginPage() {
       const response = await api.post('/api/login', { username, password }); // 엔드포인트 확인
       console.log('Login response:', response.data);
       const { token, userId } = response.data;
-      login(token, userId);
+      login(token, userId.toString());
       router.push('/');
     } catch (error) {
       console.log('Login error:', error);
