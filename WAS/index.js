@@ -77,7 +77,7 @@ app.post('/api/login', async (req, res) => {
 
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '1h' });
     console.log(`User ${username} logged in successfully`);
-    res.json({ message: 'Login successful', token });
+    res.json({ message: 'Login successful', token , userId: user.id });
   } catch (error) {
     console.error('Database error on login:', error);
     res.status(500).json({ message: 'Database error', error });
