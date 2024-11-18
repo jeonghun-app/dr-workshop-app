@@ -1,0 +1,73 @@
+#!/bin/bash
+# 시스템 업데이트 및 필요한 패키지 설치
+sudo apt update -y
+sudo apt install -y mysql-server git apache2
+
+# MySQL 설정 파일 수정하여 외부 접속 허용
+sudo sed -i "s/bind-address.*/bind-address = 0.0.0.0/" /etc/mysql/mysql.conf.d/mysqld.cnf
+
+# MySQL 서비스 시작
+sudo systemctl start mysql
+
+# MySQL 초기 설정 및 비밀번호 변경
+sudo mysql -e "SELECT 1 FROM mysql.user WHERE user='root' AND host='%' LIMIT 1;" | grep -q 1 || sudo mysql -e "CREATE USER 'root'@'%' IDENTIFIED WITH mysql_native_password BY 'qwer1234';"
+sudo mysql -uroot -pqwer1234 -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'qwer1234';"
+sudo mysql -uroot -pqwer1234 -e "CREATE DATABASE IF NOT EXISTS finance_app;"
+sudo mysql -uroot -pqwer1234 -e "FLUSH PRIVILEGES;"
+
+# Git 리포지토리 클론
+git clone https://github.com/jeonghun-app/dr-workshop-app.git /home/ubuntu/dr-workshop
+
+# MySQL 데이터베이스 구조 적용
+sudo mysql -uroot -pqwer1234 finance_app < /home/ubuntu/dr-workshop/DB/database_structure.sql
+
+# finance_user 사용자 생성 및 권한 부여
+sudo mysql -uroot -pqwer1234 -e "CREATE USER IF NOT EXISTS 'finance_user'@'localhost' IDENTIFIED BY 'yourpassword';"
+sudo mysql -uroot -pqwer1234 -e "GRANT ALL PRIVILEGES ON finance_app.* TO 'finance_user'@'localhost';"
+sudo mysql -uroot -pqwer1234 -e "FLUSH PRIVILEGES;"
+
+# 방화벽 규칙 추가 (Ubuntu UFW를 사용하는 경우)
+sudo ufw allow 3306/tcp
+
+# Node.js 및 npm 설치
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# WAS 디렉터리로 이동하여 npm 설치 및 API 서버 실행 (5000번 포트)
+cd /home/ubuntu/dr-workshop/WAS
+npm install
+nohup node index.js -- -p 5000 &
+
+# Web-app 디렉터리로 이동하여 npm 설치 및 Next.js 애플리케이션 빌드
+cd /home/ubuntu/dr-workshop/web-app
+npm install
+npm run build
+
+# Next.js 애플리케이션을 3000번 포트에서 백그라운드로 실행
+nohup npm start -- -p 3000 &
+
+# Apache 설치 및 리버스 프록시 설정
+sudo apt install -y apache2
+sudo a2enmod proxy proxy_http rewrite
+
+# Apache를 설정하여 80 포트에서 3000번 포트와 5000번 포트로 프록시
+cat <<EOF | sudo tee /etc/apache2/sites-available/000-default.conf
+<VirtualHost *:80>
+    ServerAdmin webmaster@localhost
+
+    # API 경로를 5000번 포트로 프록시
+    ProxyPass "/api" "http://localhost:5000/api"
+    ProxyPassReverse "/api" "http://localhost:5000/api"
+
+    # Next.js 애플리케이션을 리버스 프록시로 설정
+    ProxyPreserveHost On
+    ProxyPass "/" "http://localhost:3000/"
+    ProxyPassReverse "/" "http://localhost:3000/"
+
+    ErrorLog \${APACHE_LOG_DIR}/error.log
+    CustomLog \${APACHE_LOG_DIR}/access.log combined
+</VirtualHost>
+EOF
+
+# Apache 재시작
+sudo systemctl restart apache2

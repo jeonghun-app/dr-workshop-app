@@ -27,7 +27,7 @@ export default function AccountManagement() {
   }, [selectedAccount]);
 
   const fetchAccounts = async () => {
-    const response = await api.get('/accounts');
+    const response = await api.get('/api/accounts');
     setAccounts(response.data.accounts);
     if (response.data.accounts.length > 0) {
       setSelectedAccount(response.data.accounts[0].account_number);
@@ -36,31 +36,31 @@ export default function AccountManagement() {
   };
 
   const fetchTransactions = async (accountNumber: string) => {
-    const response = await api.get(`/account/${accountNumber}/transactions`);
+    const response = await api.get(`/api/account/${accountNumber}/transactions`);
     setTransactions(response.data.transactions);
   };
 
   const createAccount = async () => {
-    await api.post('/account', { userId });
+    await api.post('/api/account', { userId });
     fetchAccounts();
   };
 
   const handleDeposit = async () => {
-    await api.post('/account/deposit', { accountNumber: selectedAccount, amount });
+    await api.post('/api/account/deposit', { accountNumber: selectedAccount, amount });
     fetchAccounts();
     fetchTransactions(selectedAccount);
     setShowDeposit(false);
   };
 
   const handleWithdraw = async () => {
-    await api.post('/account/withdraw', { accountNumber: selectedAccount, amount });
+    await api.post('/api/account/withdraw', { accountNumber: selectedAccount, amount });
     fetchAccounts();
     fetchTransactions(selectedAccount);
     setShowWithdraw(false);
   };
 
   const handleTransfer = async () => {
-    await api.post('/account/transfer', { accountNumber: selectedAccount, targetAccountNumber: targetAccount, amount });
+    await api.post('/api/account/transfer', { accountNumber: selectedAccount, targetAccountNumber: targetAccount, amount });
     fetchAccounts();
     fetchTransactions(selectedAccount);
     setShowTransfer(false);

@@ -11,7 +11,7 @@ app.use(express.json());
 
 // CORS 설정 추가
 app.use(cors({
-  origin: 'http://localhost:3000', // 허용할 도메인
+  origin: '*', // 허용할 도메인
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   credentials: true,
 }));
@@ -25,7 +25,7 @@ const db = mysql.createPool({
 });
 
 // 회원가입 라우트
-app.post('/register', async (req, res) => {
+app.post('/api/register', async (req, res) => {
   const { username, password } = req.body;
   
   if (!username || !password) {
@@ -52,7 +52,7 @@ app.post('/register', async (req, res) => {
 });
 
 // 로그인 라우트
-app.post('/login', async (req, res) => {
+app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   
   if (!username || !password) {
@@ -103,7 +103,7 @@ const authenticate = (req, res, next) => {
 };
 
 // 계좌 생성 라우트
-app.post('/account', authenticate, async (req, res) => {
+app.post('/api/account', authenticate, async (req, res) => {
   const { userId } = req;
   const accountNumber = uuidv4().split('-')[0];
   console.log(`Creating account for user ${userId} with account number ${accountNumber}`);
@@ -120,7 +120,7 @@ app.post('/account', authenticate, async (req, res) => {
 });
 
 // 계좌 목록 조회 라우트
-app.get('/accounts', authenticate, async (req, res) => {
+app.get('/api/accounts', authenticate, async (req, res) => {
   const { userId } = req;
   console.log(`Fetching accounts for user ${userId}`);
 
@@ -134,7 +134,7 @@ app.get('/accounts', authenticate, async (req, res) => {
 });
 
 // 입금 라우트
-app.post('/account/deposit', authenticate, async (req, res) => {
+app.post('/api/account/deposit', authenticate, async (req, res) => {
   const { userId } = req;
   const { accountNumber, amount } = req.body;
 
@@ -160,7 +160,7 @@ app.post('/account/deposit', authenticate, async (req, res) => {
 });
 
 // 출금 라우트
-app.post('/account/withdraw', authenticate, async (req, res) => {
+app.post('/api/account/withdraw', authenticate, async (req, res) => {
   const { userId } = req;
   const { accountNumber, amount } = req.body;
 
@@ -191,7 +191,7 @@ app.post('/account/withdraw', authenticate, async (req, res) => {
 });
 
 // 이체 라우트
-app.post('/account/transfer', authenticate, async (req, res) => {
+app.post('/api/account/transfer', authenticate, async (req, res) => {
   const { userId } = req;
   const { accountNumber, targetAccountNumber, amount } = req.body;
 
@@ -239,7 +239,7 @@ app.post('/account/transfer', authenticate, async (req, res) => {
 });
 
 // 트랜잭션 조회 라우트
-app.get('/account/:accountNumber/transactions', authenticate, async (req, res) => {
+app.get('/api/account/:accountNumber/transactions', authenticate, async (req, res) => {
   const { userId } = req;
   const { accountNumber } = req.params;
 

@@ -15,7 +15,7 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await api.post('/login', { username, password }); // 엔드포인트 확인
+      const response = await api.post('/api/login', { username, password }); // 엔드포인트 확인
       console.log('Login response:', response.data);
       const { token, userId } = response.data;
       login(token, userId);
