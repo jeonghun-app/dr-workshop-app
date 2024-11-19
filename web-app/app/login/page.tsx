@@ -15,20 +15,18 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await api.post('/api/login', { username, password });
+      const response = await api.post('/api/login', { username, password }); // 엔드포인트 확인
       console.log('Login response:', response.data);
       const { token, userId } = response.data;
-
-      // 상태 업데이트
       login(token, userId.toString());
-
-      // 페이지 이동
       router.push('/');
     } catch (error) {
-      console.error('Login error:', error);
+      console.log('Login error:', error);
       alert('Login failed');
+      }
+      
     }
-  };
+ 
 
   return (
     <form onSubmit={handleSubmit} className="max-w-md mx-auto mt-10">
