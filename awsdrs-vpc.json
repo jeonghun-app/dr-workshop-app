@@ -1,0 +1,78 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Resources": {
+    "DRSVPC": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": "10.0.0.0/16",
+        "EnableDnsSupport": true,
+        "EnableDnsHostnames": true,
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "DRS-VPC"
+          }
+        ]
+      }
+    },
+    "PublicSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "DRSVPC"
+        },
+        "CidrBlock": "10.0.1.0/24",
+        "MapPublicIpOnLaunch": true,
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Public-Subnet"
+          }
+        ]
+      }
+    },
+    "DeveloperIAMUser": {
+      "Type": "AWS::IAM::User",
+      "Properties": {
+        "UserName": "Developer",
+        "Policies": [
+          {
+            "PolicyName": "AdministratorAccessPolicy",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": "*",
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "DeveloperAccessKey": {
+      "Type": "AWS::IAM::AccessKey",
+      "Properties": {
+        "UserName": {
+          "Ref": "DeveloperIAMUser"
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "AccessKeyId": {
+      "Value": {
+        "Ref": "DeveloperAccessKey"
+      },
+      "Description": "Access key for Developer IAM user."
+    },
+    "SecretAccessKey": {
+      "Value": {
+        "Fn::GetAtt": ["DeveloperAccessKey", "SecretAccessKey"]
+      },
+      "Description": "Secret access key for Developer IAM user."
+    }
+  }
+}
