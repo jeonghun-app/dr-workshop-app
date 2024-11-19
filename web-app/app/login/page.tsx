@@ -15,17 +15,22 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await api.post('/api/login', { username, password }); // 엔드포인트 확인
+      const response = await api.post('/api/login', { username, password });
       console.log('Login response:', response.data);
       const { token, userId } = response.data;
-      login(token, userId.toString());
+      
+      // 상태 업데이트 후에 navigation 실행
+      await new Promise((resolve) => {
+        login(token, userId.toString());
+        resolve(true);
+      });
+  
       router.push('/');
     } catch (error) {
       console.log('Login error:', error);
       alert('Login failed');
-      }
-      
     }
+  };
  
 
   return (
