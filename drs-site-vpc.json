@@ -1,30 +1,30 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "CloudFormation template to create a VPC with Aurora RDS using MySQL 8.0",
+  "Description": "CloudFormation template to create a VPC with Aurora RDS Writer and Reader using MySQL 8.0",
   "Parameters": {
     "VpcCidr": {
       "Type": "String",
-      "Default": "10.0.0.0/16",
+      "Default": "172.31.0.0/16",
       "Description": "CIDR block for the VPC"
     },
     "PublicSubnet1Cidr": {
       "Type": "String",
-      "Default": "10.0.1.0/24",
+      "Default": "172.31.1.0/24",
       "Description": "CIDR block for Public Subnet 1"
     },
     "PublicSubnet2Cidr": {
       "Type": "String",
-      "Default": "10.0.2.0/24",
+      "Default": "172.31.2.0/24",
       "Description": "CIDR block for Public Subnet 2"
     },
     "PrivateSubnet1Cidr": {
       "Type": "String",
-      "Default": "10.0.3.0/24",
+      "Default": "172.31.3.0/24",
       "Description": "CIDR block for Private Subnet 1"
     },
     "PrivateSubnet2Cidr": {
       "Type": "String",
-      "Default": "10.0.4.0/24",
+      "Default": "172.31.4.0/24",
       "Description": "CIDR block for Private Subnet 2"
     }
   },
@@ -238,6 +238,27 @@
             "Ref": "AuroraSecurityGroup"
           }
         ]
+      }
+    },
+    "AuroraWriterInstance": {
+      "Type": "AWS::RDS::DBInstance",
+      "Properties": {
+        "DBClusterIdentifier": {
+          "Ref": "AuroraCluster"
+        },
+        "DBInstanceClass": "db.r5.large",
+        "Engine": "aurora-mysql"
+      }
+    },
+    "AuroraReaderInstance": {
+      "Type": "AWS::RDS::DBInstance",
+      "Properties": {
+        "DBClusterIdentifier": {
+          "Ref": "AuroraCluster"
+        },
+        "DBInstanceClass": "db.r5.large",
+        "Engine": "aurora-mysql",
+        "DBInstanceRole": "READER"
       }
     },
     "AuroraSubnetGroup": {

@@ -18,20 +18,17 @@ export default function LoginPage() {
       const response = await api.post('/api/login', { username, password });
       console.log('Login response:', response.data);
       const { token, userId } = response.data;
-      
-      // 상태 업데이트 후에 navigation 실행
-      await new Promise((resolve) => {
-        login(token, userId.toString());
-        resolve(true);
-      });
-  
+
+      // 상태 업데이트
+      login(token, userId.toString());
+
+      // 페이지 이동
       router.push('/');
     } catch (error) {
-      console.log('Login error:', error);
+      console.error('Login error:', error);
       alert('Login failed');
     }
   };
- 
 
   return (
     <form onSubmit={handleSubmit} className="max-w-md mx-auto mt-10">
