@@ -219,15 +219,6 @@
     }
   },
   "Outputs": {
-    "DMSEndpoint": {
-      "Description": "DMS Replication Instance Endpoint",
-      "Value": {
-        "Fn::GetAtt": [
-          "DMSReplicationInstance",
-          "ReplicationInstancePublicIpAddress"
-        ]
-      }
-    },
     "AuroraClusterEndpoint": {
       "Description": "Aurora Cluster Endpoint",
       "Value": { "Fn::GetAtt": ["AuroraCluster", "Endpoint.Address"] }
