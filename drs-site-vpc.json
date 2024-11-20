@@ -78,9 +78,12 @@
         },
         "MapPublicIpOnLaunch": true,
         "AvailabilityZone": {
-          "Fn::Select": [0, {
-            "Fn::GetAZs": ""
-          }]
+          "Fn::Select": [
+            0,
+            {
+              "Fn::GetAZs": ""
+            }
+          ]
         },
         "Tags": [
           {
@@ -101,9 +104,12 @@
         },
         "MapPublicIpOnLaunch": true,
         "AvailabilityZone": {
-          "Fn::Select": [1, {
-            "Fn::GetAZs": ""
-          }]
+          "Fn::Select": [
+            1,
+            {
+              "Fn::GetAZs": ""
+            }
+          ]
         },
         "Tags": [
           {
@@ -137,9 +143,12 @@
           "Ref": "PrivateSubnet1Cidr"
         },
         "AvailabilityZone": {
-          "Fn::Select": [0, {
-            "Fn::GetAZs": ""
-          }]
+          "Fn::Select": [
+            0,
+            {
+              "Fn::GetAZs": ""
+            }
+          ]
         },
         "Tags": [
           {
@@ -159,9 +168,12 @@
           "Ref": "PrivateSubnet2Cidr"
         },
         "AvailabilityZone": {
-          "Fn::Select": [1, {
-            "Fn::GetAZs": ""
-          }]
+          "Fn::Select": [
+            1,
+            {
+              "Fn::GetAZs": ""
+            }
+          ]
         },
         "Tags": [
           {
@@ -197,6 +209,29 @@
         }
       }
     },
+    "PublicSubnet1RouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "PublicSubnet1"
+        },
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        }
+      }
+    },
+    "PublicSubnet2RouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "PublicSubnet2"
+        },
+        "RouteTableId": {
+          "Ref": "PublicRouteTable"
+        }
+      }
+    },
+
     "PrivateRouteTable": {
       "Type": "AWS::EC2::RouteTable",
       "Properties": {
@@ -220,6 +255,28 @@
         "DestinationCidrBlock": "0.0.0.0/0",
         "NatGatewayId": {
           "Ref": "NatGateway"
+        }
+      }
+    },
+    "PrivateSubnet1RouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "PrivateSubnet1"
+        },
+        "RouteTableId": {
+          "Ref": "PrivateRouteTable"
+        }
+      }
+    },
+    "PrivateSubnet2RouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "PrivateSubnet2"
+        },
+        "RouteTableId": {
+          "Ref": "PrivateRouteTable"
         }
       }
     },
