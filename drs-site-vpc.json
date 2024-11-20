@@ -126,6 +126,25 @@
         "RouteTableId": { "Ref": "PublicRouteTable" }
       }
     },
+    "DMSVpcRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": { "Service": "dms.amazonaws.com" },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AmazonDMSVPCManagementRole"
+        ],
+        "RoleName": "dms-vpc-role"
+      }
+    },
     "DMSReplicationInstance": {
       "Type": "AWS::DMS::ReplicationInstance",
       "Properties": {
@@ -133,8 +152,11 @@
         "ReplicationInstanceIdentifier": "dms-replication-instance",
         "AllocatedStorage": 100,
         "PubliclyAccessible": true,
-        "VpcSecurityGroupIds": [{ "Ref": "AuroraSecurityGroup" }],
-        "ReplicationSubnetGroupIdentifier": { "Ref": "DMSSubnetGroup" }
+        "VpcSecurityGroupIds": [
+          { "Ref": "AuroraSecurityGroup" }
+        ],
+        "ReplicationSubnetGroupIdentifier": { "Ref": "DMSSubnetGroup" },
+        "IamRoleArn": { "Fn::GetAtt": ["DMSVpcRole", "Arn"] }
       }
     },
     "DMSSubnetGroup": {
@@ -142,7 +164,10 @@
       "Properties": {
         "ReplicationSubnetGroupIdentifier": "dms-subnet-group",
         "ReplicationSubnetGroupDescription": "DMS Subnet Group",
-        "SubnetIds": [{ "Ref": "PublicSubnet1" }, { "Ref": "PublicSubnet2" }]
+        "SubnetIds": [
+          { "Ref": "PublicSubnet1" },
+          { "Ref": "PublicSubnet2" }
+        ]
       }
     },
     "AuroraCluster": {
@@ -156,18 +181,14 @@
           "Ref": "AuroraSubnetGroup"
         },
         "VpcSecurityGroupIds": [
-          {
-            "Ref": "AuroraSecurityGroup"
-          }
+          { "Ref": "AuroraSecurityGroup" }
         ]
       }
     },
     "AuroraWriterInstance": {
       "Type": "AWS::RDS::DBInstance",
       "Properties": {
-        "DBClusterIdentifier": {
-          "Ref": "AuroraCluster"
-        },
+        "DBClusterIdentifier": { "Ref": "AuroraCluster" },
         "DBInstanceClass": "db.r5.large",
         "Engine": "aurora-mysql"
       }
@@ -175,9 +196,7 @@
     "AuroraReaderInstance": {
       "Type": "AWS::RDS::DBInstance",
       "Properties": {
-        "DBClusterIdentifier": {
-          "Ref": "AuroraCluster"
-        },
+        "DBClusterIdentifier": { "Ref": "AuroraCluster" },
         "DBInstanceClass": "db.r5.large",
         "Engine": "aurora-mysql"
       }
@@ -187,12 +206,8 @@
       "Properties": {
         "DBSubnetGroupDescription": "Subnet group for Aurora",
         "SubnetIds": [
-          {
-            "Ref": "PrivateSubnet1"
-          },
-          {
-            "Ref": "PrivateSubnet2"
-          }
+          { "Ref": "PrivateSubnet1" },
+          { "Ref": "PrivateSubnet2" }
         ]
       }
     },
