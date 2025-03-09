@@ -1,7 +1,6 @@
-// app/login/page.tsx
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
 import { api } from '@/lib/api';
@@ -11,22 +10,25 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const router = useRouter();
   const login = useAuthStore((state) => state.login);
+  const initializeAuth = useAuthStore((state) => state.initializeAuth);
+
+  // 초기화
+  useEffect(() => {
+    initializeAuth();
+  }, [initializeAuth]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await api.post('/api/login', { username, password }); // 엔드포인트 확인
-      console.log('Login response:', response.data);
+      const response = await api.post('/api/login', { username, password });
       const { token, userId } = response.data;
       login(token, userId.toString());
       router.push('/');
     } catch (error) {
       console.log('Login error:', error);
       alert('Login failed');
-      }
-      
     }
- 
+  };
 
   return (
     <form onSubmit={handleSubmit} className="max-w-md mx-auto mt-10">
