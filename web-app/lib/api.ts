@@ -11,6 +11,21 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  console.log('Request config:', config);
   return config;
+}, (error) => {
+  console.error('Request error:', error);
+  return Promise.reject(error);
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401) {
+      console.error("Unauthorized: Redirecting to login");
+      useAuthStore.getState().logout();
+      window.location.href = "/login"; // 강제 로그아웃 처리
+    }
+    return Promise.reject(error);
+  }
+);
+
