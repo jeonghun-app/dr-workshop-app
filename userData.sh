@@ -62,6 +62,7 @@ log "Installing basic packages..."
     exit 1
 }
 
+
 # Backup MySQL configuration and data
 log "Backing up MySQL configuration..."
 BACKUP_DIR="/var/backup/mysql"
@@ -122,6 +123,19 @@ CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED BY '${DB_ROOT_PASSWORD}';
 GRANT ALL PRIVILEGES ON *.* TO 'root'@'%';
 FLUSH PRIVILEGES;
 EOF
+
+    # Import database schema
+    log "Importing database schema..."
+    if [ -f "/home/ubuntu/dr-workshop/DB/database_structure.sql" ]; then
+        sudo mysql -uroot -p"${DB_ROOT_PASSWORD}" finance_app < /home/ubuntu/dr-workshop/DB/database_structure.sql || {
+            log "Failed to import database schema"
+            exit 1
+        }
+        log "Database schema imported successfully"
+    else
+        log "Warning: Database schema file not found at /home/ubuntu/dr-workshop/DB/database_structure.sql"
+    fi
+
 } || handle_error $LINENO
 
 # Configure firewall
@@ -169,6 +183,17 @@ DB_NAME=finance_app
 ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
 EOF
     chmod 600 .env
+
+    # Configure CORS
+    cat << EOF > cors.js
+const corsOptions = {
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+};
+module.exports = corsOptions;
+EOF
+    chmod 644 cors.js
 } || handle_error $LINENO
 
 # Configure Web Application
