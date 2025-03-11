@@ -4,6 +4,9 @@ import { useAuthStore } from '@/stores/authStore';
 
 export const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_BACKEND_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
 api.interceptors.request.use((config) => {
@@ -21,9 +24,10 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401) {
-      console.error("Unauthorized: Redirecting to login");
       useAuthStore.getState().logout();
-      window.location.href = "/login"; // 강제 로그아웃 처리
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

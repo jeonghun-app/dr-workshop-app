@@ -7,7 +7,7 @@ interface AuthState {
     token: string | null;
     login: (token: string, userId: string) => void;
     logout: () => void;
-    initializeAuth: () => void; // 초기화 함수 추가
+    initializeAuth: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -18,12 +18,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     // 로그인 메서드
     login: (token: string, userId: string) => {
         localStorage.setItem("token", token);
+        localStorage.setItem("userId", userId);
         set({ isAuthenticated: true, userId, token });
     },
 
     // 로그아웃 메서드
     logout: () => {
         localStorage.removeItem("token");
+        localStorage.removeItem("userId");
         set({ isAuthenticated: false, userId: null, token: null });
     },
 
@@ -34,6 +36,8 @@ export const useAuthStore = create<AuthState>((set) => ({
             const userId = localStorage.getItem("userId");
             if (token && userId) {
                 set({ isAuthenticated: true, token, userId });
+            } else {
+                set({ isAuthenticated: false, token: null, userId: null });
             }
         }
     },
