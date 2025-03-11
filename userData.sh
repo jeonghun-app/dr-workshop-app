@@ -109,18 +109,19 @@ log "Starting MySQL service..."
 # Configure MySQL users and permissions with better security
 log "Configuring MySQL users and permissions..."
 {
-    # Secure root user
+    # Secure root user for all hosts
     sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${DB_ROOT_PASSWORD}';"
+    sudo mysql -e "CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED WITH mysql_native_password BY '${DB_ROOT_PASSWORD}';"
+    sudo mysql -e "GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;"
+    sudo mysql -e "FLUSH PRIVILEGES;"
     
     # Create and configure users
     sudo mysql -uroot -p"${DB_ROOT_PASSWORD}" << EOF
 CREATE DATABASE IF NOT EXISTS finance_app;
-CREATE USER IF NOT EXISTS 'finance_user'@'localhost' IDENTIFIED BY '${FINANCE_USER_PASSWORD}';
-GRANT ALL PRIVILEGES ON finance_app.* TO 'finance_user'@'localhost';
+CREATE USER IF NOT EXISTS 'finance_user'@'%' IDENTIFIED BY '${FINANCE_USER_PASSWORD}';
+GRANT ALL PRIVILEGES ON finance_app.* TO 'finance_user'@'%';
 CREATE USER IF NOT EXISTS 'dms_user'@'%' IDENTIFIED BY '${DMS_USER_PASSWORD}';
 GRANT SELECT, RELOAD, REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO 'dms_user'@'%';
-CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED BY '${DB_ROOT_PASSWORD}';
-GRANT ALL PRIVILEGES ON *.* TO 'root'@'%';
 FLUSH PRIVILEGES;
 EOF
 
