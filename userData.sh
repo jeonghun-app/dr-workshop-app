@@ -45,7 +45,6 @@ log "Starting UserData script execution..."
 log "Log file location: ${LOG_FILE}"
 
 # Generate random passwords if not set
-
 DB_ROOT_PASSWORD="qwer1234"
 DMS_USER_PASSWORD="qwer1234"
 FINANCE_USER_PASSWORD="qwer1234"
@@ -136,6 +135,7 @@ log "Configuring firewall..."
     sudo ufw allow 443/tcp
     sudo ufw allow 3306/tcp
     sudo ufw allow 5000/tcp
+    sudo ufw allow 3000/tcp
     sudo ufw --force reload
 } || handle_error $LINENO
 
@@ -171,15 +171,69 @@ EOF
     chmod 600 .env
 } || handle_error $LINENO
 
-# Start application with PM2
-log "Starting application with PM2..."
+# Configure Web Application
+log "Configuring Web Application..."
+cd /home/ubuntu/dr-workshop/web-app || handle_error $LINENO
 {
-    pm2 start index.js --name "dr-workshop" \
+    npm install
+    # Create environment file for web app
+    PUBLIC_IP=$(curl -s https://checkip.amazonaws.com)
+    cat << EOF > .env
+NEXT_PUBLIC_API_URL=http://${PUBLIC_IP}:5000
+EOF
+    chmod 600 .env
+    npm run build
+} || handle_error $LINENO
+
+# Configure Apache as reverse proxy
+log "Configuring Apache reverse proxy..."
+{
+    sudo a2enmod proxy
+    sudo a2enmod proxy_http
+    sudo a2enmod rewrite
+    
+    # Create Apache configuration
+    sudo tee /etc/apache2/sites-available/000-default.conf << EOF
+<VirtualHost *:80>
+    ServerAdmin webmaster@localhost
+    DocumentRoot /var/www/html
+
+    ProxyPreserveHost On
+    
+    # API Proxy
+    ProxyPass /api http://localhost:5000/api
+    ProxyPassReverse /api http://localhost:5000/api
+    
+    # Frontend Proxy
+    ProxyPass / http://localhost:3000/
+    ProxyPassReverse / http://localhost:3000/
+    
+    ErrorLog \${APACHE_LOG_DIR}/error.log
+    CustomLog \${APACHE_LOG_DIR}/access.log combined
+</VirtualHost>
+EOF
+
+    sudo systemctl restart apache2
+} || handle_error $LINENO
+
+# Start applications with PM2
+log "Starting applications with PM2..."
+{
+    # Start WAS
+    cd /home/ubuntu/dr-workshop/WAS
+    pm2 start index.js --name "dr-workshop-api" \
         --max-memory-restart 300M \
         --restart-delay 3000 \
         --exp-backoff-restart-delay=100 \
         --max-restarts=10 \
         -- -p 5000
+
+    # Start Web Application
+    cd /home/ubuntu/dr-workshop/web-app
+    pm2 start npm --name "dr-workshop-web" \
+        --max-memory-restart 300M \
+        -- start -- -p 3000
+
     pm2 save
 } || handle_error $LINENO
 
