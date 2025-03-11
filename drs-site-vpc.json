@@ -348,6 +348,112 @@
                     }
                 ]
             }
+        },
+
+        "DMSVPCRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "RoleName": "dms-vpc-role",
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "dms.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/service-role/AmazonDMSVPCManagementRole"
+                ]
+            }
+        },
+
+        "DMSCloudWatchRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "RoleName": "dms-cloudwatch-logs-role",
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "dms.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/service-role/AmazonDMSCloudWatchLogsRole"
+                ]
+            }
+        },
+
+        "DMSSubnetGroup": {
+            "Type": "AWS::DMS::ReplicationSubnetGroup",
+            "Properties": {
+                "ReplicationSubnetGroupDescription": "DMS subnet group using public subnets",
+                "ReplicationSubnetGroupIdentifier": "dms-public-subnet-group",
+                "SubnetIds": [
+                    { "Ref": "PublicSubnet1" },
+                    { "Ref": "PublicSubnet2" }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "DMS Public Subnet Group"
+                    }
+                ]
+            }
+        },
+
+        "DMSSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Security group for DMS replication instance",
+                "VpcId": { "Ref": "Vpc" },
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 3306,
+                        "ToPort": 3306,
+                        "CidrIp": "0.0.0.0/0"
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "DMS Security Group"
+                    }
+                ]
+            }
+        },
+
+        "DMSReplicationInstance": {
+            "Type": "AWS::DMS::ReplicationInstance",
+            "DependsOn": ["DMSVPCRole", "DMSCloudWatchRole"],
+            "Properties": {
+                "ReplicationInstanceClass": "dms.c5.large",
+                "AllocatedStorage": 50,
+                "MultiAZ": false,
+                "PubliclyAccessible": true,
+                "ReplicationSubnetGroupIdentifier": {
+                    "Ref": "DMSSubnetGroup"
+                },
+                "VpcSecurityGroupIds": [{ "Ref": "DMSSecurityGroup" }],
+                "EngineVersion": "3.4.7",
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "DMS Replication Instance"
+                    }
+                ]
+            }
         }
     },
     "Outputs": {
@@ -361,6 +467,24 @@
             "Description": "Aurora Read Endpoint",
             "Value": {
                 "Fn::GetAtt": ["AuroraCluster", "ReadEndpoint.Address"]
+            }
+        },
+        "DMSReplicationInstanceARN": {
+            "Description": "ARN of the DMS Replication Instance",
+            "Value": {
+                "Fn::GetAtt": [
+                    "DMSReplicationInstance",
+                    "ReplicationInstanceArn"
+                ]
+            }
+        },
+        "DMSReplicationInstanceEndpoint": {
+            "Description": "Endpoint of the DMS Replication Instance",
+            "Value": {
+                "Fn::GetAtt": [
+                    "DMSReplicationInstance",
+                    "ReplicationInstancePrivateIpAddresses"
+                ]
             }
         }
     }

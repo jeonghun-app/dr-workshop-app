@@ -163,7 +163,4 @@ else
     echo "VPC templates not found. Skipping deployment."
 fi
 
-# 애플리케이션 클론
-git clone https://github.com/jeonghun-app/dr-workshop-app.git /home/ubuntu/dr-workshop
 
-[이전 스크립트의 나머지 부분 계속...]
