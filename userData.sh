@@ -249,6 +249,24 @@ CREDS_FILE="/home/ubuntu/.credentials"
     chown ubuntu:ubuntu "${CREDS_FILE}"
 } || handle_error $LINENO
 
+# Install AWS CLI v2
+log "Installing AWS CLI version 2..."
+{
+    sudo apt update -y
+    sudo apt install -y unzip
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    unzip awscliv2.zip
+    sudo ./aws/install
+    rm -f awscliv2.zip
+    rm -rf aws/
+    
+    # Verify AWS CLI installation
+    aws --version || {
+        log "AWS CLI installation failed"
+        exit 1
+    }
+} || handle_error $LINENO
+
 # Deploy CloudFormation stacks with better error handling
 log "Deploying CloudFormation stacks..."
 cd /home/ubuntu/dr-workshop || handle_error $LINENO
