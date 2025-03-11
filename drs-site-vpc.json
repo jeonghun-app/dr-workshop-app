@@ -446,7 +446,7 @@
                     "Ref": "DMSSubnetGroup"
                 },
                 "VpcSecurityGroupIds": [{ "Ref": "DMSSecurityGroup" }],
-                "EngineVersion": "3.4.7",
+                "EngineVersion": "3.5.3",
                 "Tags": [
                     {
                         "Key": "Name",
@@ -471,12 +471,7 @@
         },
         "DMSReplicationInstanceARN": {
             "Description": "ARN of the DMS Replication Instance",
-            "Value": {
-                "Fn::GetAtt": [
-                    "DMSReplicationInstance",
-                    "ReplicationInstanceArn"
-                ]
-            }
+            "Value": { "Ref": "DMSReplicationInstance" }
         },
         "DMSReplicationInstanceEndpoint": {
             "Description": "Endpoint of the DMS Replication Instance",
