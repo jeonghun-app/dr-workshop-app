@@ -162,14 +162,6 @@ log "Installing Node.js..."
     sudo npm install -g npm@latest
 } || handle_error $LINENO
 
-# Install and configure PM2
-log "Installing PM2..."
-{
-    sudo npm install -g pm2
-    pm2 startup
-    sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu
-} || handle_error $LINENO
-
 # Configure WAS
 log "Configuring WAS..."
 cd /home/ubuntu/dr-workshop/WAS || handle_error $LINENO
@@ -243,25 +235,25 @@ EOF
     sudo systemctl restart apache2
 } || handle_error $LINENO
 
-# Start applications with PM2
-log "Starting applications with PM2..."
+# Start applications in background
+log "Starting applications..."
 {
     # Start WAS
-    cd /home/ubuntu/dr-workshop/WAS
-    pm2 start index.js --name "dr-workshop-api" \
-        --max-memory-restart 300M \
-        --restart-delay 3000 \
-        --exp-backoff-restart-delay=100 \
-        --max-restarts=10 \
-        -- -p 5000
+    cd /home/ubuntu/dr-workshop/WAS || handle_error $LINENO
+    nohup node index.js -p 5000 > /var/log/was.log 2>&1 &
+    log "WAS started in background"
 
     # Start Web Application
-    cd /home/ubuntu/dr-workshop/web-app
-    pm2 start npm --name "dr-workshop-web" \
-        --max-memory-restart 300M \
-        -- start -- -p 3000
+    cd /home/ubuntu/dr-workshop/web-app || handle_error $LINENO
+    nohup npm start -- -p 3000 > /var/log/webapp.log 2>&1 &
+    log "Web application started in background"
 
-    pm2 save
+    # Wait a few seconds to ensure processes are started
+    sleep 5
+    
+    # Check if processes are running
+    ps aux | grep "node index.js" | grep -v grep || log "Warning: WAS might not have started properly"
+    ps aux | grep "npm start" | grep -v grep || log "Warning: Web application might not have started properly"
 } || handle_error $LINENO
 
 # Save credentials securely
