@@ -109,22 +109,63 @@ log "Starting MySQL service..."
 # Configure MySQL users and permissions with better security
 log "Configuring MySQL users and permissions..."
 {
-    # Secure root user for all hosts
-    sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${DB_ROOT_PASSWORD}';"
-    sudo mysql -e "CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED WITH mysql_native_password BY '${DB_ROOT_PASSWORD}';"
-    sudo mysql -e "GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;"
-    sudo mysql -e "FLUSH PRIVILEGES;"
+    # Stop MySQL service first
+    sudo systemctl stop mysql || log "Warning: Failed to stop MySQL"
+    
+    # Start MySQL with skip-grant-tables to reset root password
+    sudo mysqld_safe --skip-grant-tables --skip-networking &
+    sleep 5
+    
+    # Reset root password and privileges
+    sudo mysql << EOF
+FLUSH PRIVILEGES;
+ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '${DB_ROOT_PASSWORD}';
+CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED WITH mysql_native_password BY '${DB_ROOT_PASSWORD}';
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'localhost' WITH GRANT OPTION;
+GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
+FLUSH PRIVILEGES;
+EOF
+
+    # Stop MySQL and restart normally
+    sudo killall mysqld
+    sleep 5
+    sudo systemctl start mysql
+    sleep 5
+
+    # Verify root access
+    sudo mysql -uroot -p"${DB_ROOT_PASSWORD}" -e "SELECT VERSION();" || {
+        log "Failed to verify root access"
+        exit 1
+    }
     
     # Create and configure users
     sudo mysql -uroot -p"${DB_ROOT_PASSWORD}" << EOF
 CREATE DATABASE IF NOT EXISTS finance_app;
 CREATE USER IF NOT EXISTS 'finance_user'@'%' IDENTIFIED BY '${FINANCE_USER_PASSWORD}';
 GRANT ALL PRIVILEGES ON finance_app.* TO 'finance_user'@'%';
-CREATE USER IF NOT EXISTS 'dms_user'@'%' IDENTIFIED BY '${DMS_USER_PASSWORD}';
-GRANT SELECT, RELOAD, REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO 'dms_user'@'%';
+
+# Recreate DMS user with proper authentication and expanded privileges
+DROP USER IF EXISTS 'dms_user'@'%';
+CREATE USER 'dms_user'@'%' IDENTIFIED WITH mysql_native_password BY '${DMS_USER_PASSWORD}';
+GRANT REPLICATION CLIENT ON *.* TO 'dms_user'@'%';
+GRANT REPLICATION SLAVE ON *.* TO 'dms_user'@'%';
+GRANT SELECT ON *.* TO 'dms_user'@'%';
+GRANT RELOAD ON *.* TO 'dms_user'@'%';
+GRANT SHOW DATABASES ON *.* TO 'dms_user'@'%';
+GRANT SHOW VIEW ON *.* TO 'dms_user'@'%';
+GRANT SELECT ON mysql.* TO 'dms_user'@'%';
+GRANT EXECUTE ON *.* TO 'dms_user'@'%';
+
 FLUSH PRIVILEGES;
 EOF
 
+    # Verify user creation and privileges
+    log "Verifying MySQL users and privileges..."
+    sudo mysql -uroot -p"${DB_ROOT_PASSWORD}" -e "SELECT User, Host, plugin FROM mysql.user WHERE User IN ('root', 'dms_user', 'finance_user');" || {
+        log "Failed to verify user creation"
+        exit 1
+    }
+    
     # Import database schema
     log "Importing database schema..."
     if [ -f "/home/ubuntu/dr-workshop/DB/database_structure.sql" ]; then
