@@ -1,0 +1,216 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: E-Wallet Service Stack
+
+Resources:
+  WalletsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  TransactionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  CreateWalletFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.9
+      Handler: create_wallet.lambda_handler
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: model/create_wallet.zip
+      Environment:
+        Variables:
+          WALLETS_TABLE: !Ref WalletsTable
+      TracingConfig:
+        Mode: Active
+      Role: !GetAtt CreateWalletFunctionRole.Arn
+
+  CreateWalletFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                Resource: !GetAtt WalletsTable.Arn
+
+  WithdrawFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.9
+      Handler: withdraw.lambda_handler
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: controller/withdraw.zip
+      Environment:
+        Variables:
+          WALLETS_TABLE: !Ref WalletsTable
+          TRANSACTIONS_TABLE: !Ref TransactionsTable
+      TracingConfig:
+        Mode: Active
+      Role: !GetAtt WithdrawFunctionRole.Arn
+
+  WithdrawFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DynamoDBAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                Resource: !GetAtt WalletsTable.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt TransactionsTable.Arn
+
+  ApiGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: EWalletApi
+      EndpointConfiguration:
+        Types:
+          - EDGE
+
+  ApiGatewayCorsPolicy:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Body: !Sub
+        - |
+          {
+            "swagger": "2.0",
+            "info": {
+              "version": "1.0",
+              "title": "EWalletApi"
+            },
+            "x-amazon-apigateway-cors": {
+              "allowMethods": ["GET", "PUT", "DELETE", "OPTIONS"],
+              "allowHeaders": ["Content-Type", "Authorization", "Content-Length", "X-Requested-With"],
+              "allowOrigins": ["*"],
+              "allowCredentials": true
+            }
+          }
+
+  ApiResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: api
+      RestApiId: !Ref ApiGateway
+
+  WalletsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref ApiResource
+      PathPart: wallets
+      RestApiId: !Ref ApiGateway
+
+  CreateWalletMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: POST
+      ResourceId: !Ref WalletsResource
+      RestApiId: !Ref ApiGateway
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${CreateWalletFunction.Arn}/invocations
+
+  WithdrawResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref ApiResource
+      PathPart: withdraw
+      RestApiId: !Ref ApiGateway
+
+  WalletWithdrawResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref WithdrawResource
+      PathPart: '{id}'
+      RestApiId: !Ref ApiGateway
+
+  WithdrawMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: PUT
+      ResourceId: !Ref WalletWithdrawResource
+      RestApiId: !Ref ApiGateway
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WithdrawFunction.Arn}/invocations
+
+  ApiGatewayDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - CreateWalletMethod
+      - WithdrawMethod
+    Properties:
+      RestApiId: !Ref ApiGateway
+
+  ApiGatewayStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      DeploymentId: !Ref ApiGatewayDeployment
+      RestApiId: !Ref ApiGateway
+      StageName: prod
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${ApiGatewayStage}
+
+  ApiDomain:
+    Description: API Gateway domain
+    Value: !Sub ${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com
+
+  ApiStage:
+    Description: API Gateway stage name
+    Value: !Ref ApiGatewayStage

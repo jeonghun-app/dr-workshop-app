@@ -16,6 +16,14 @@ app.use(cors({
   credentials: true,
 }));
 
+// 헬스 체크 라우트
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'healthy',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // MySQL 연결 설정
 const db = mysql.createPool({
   host: process.env.DB_HOST,

@@ -1,0 +1,43 @@
+@startuml
+!define AWSPuml https://raw.githubusercontent.com/awslabs/aws-icons-for-plantuml/v15.0/dist
+!include AWSPuml/AWSCommon.puml
+!include AWSPuml/NetworkingAndContentDelivery/VPC.puml
+!include AWSPuml/NetworkingAndContentDelivery/InternetGateway.puml
+!include AWSPuml/NetworkingAndContentDelivery/NATGateway.puml
+!include AWSPuml/NetworkingAndContentDelivery/VPCSubnet.puml
+!include AWSPuml/Database/AuroraInstance.puml
+!include AWSPuml/Database/DMS.puml
+
+skinparam componentStyle uml2
+
+rectangle "AWS Cloud" {
+    rectangle "VPC (172.31.0.0/16)" {
+        rectangle "AZ1" {
+            rectangle "Public Subnet 1\n172.31.1.0/24" {
+                NATGateway(nat1, "NAT Gateway", "")
+            }
+            rectangle "Private Subnet 1\n172.31.3.0/24" {
+                AuroraInstance(aurora1, "Aurora Writer", "")
+            }
+        }
+        
+        rectangle "AZ2" {
+            rectangle "Public Subnet 2\n172.31.2.0/24" {
+                DMS(dms, "DMS Replication\nInstance", "")
+            }
+            rectangle "Private Subnet 2\n172.31.4.0/24" {
+                AuroraInstance(aurora2, "Aurora Reader", "")
+            }
+        }
+        
+        InternetGateway(igw, "Internet Gateway", "")
+    }
+}
+
+' 연결 관계
+igw -[hidden]d- nat1
+nat1 -[hidden]d- aurora1
+aurora1 -[hidden]r- aurora2
+dms -[hidden]d- aurora2
+
+@enduml

@@ -1,0 +1,245 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "AWS FIS experiment template for AZ failure testing",
+    "Parameters": {
+        "TargetAvailabilityZone": {
+            "Type": "String",
+            "Description": "The Availability Zone to target for the FIS experiment",
+            "Default": "ap-northeast-2b"
+        }
+    },
+    "Resources": {
+        "FISRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "fis.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/service-role/AWSFaultInjectionSimulatorEC2Access"
+                ],
+                "Policies": [
+                    {
+                        "PolicyName": "FISCloudWatchLogsPolicy",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:CreateLogDelivery",
+                                        "logs:DeleteLogDelivery",
+                                        "logs:DescribeLogGroups",
+                                        "logs:DescribeResourcePolicies",
+                                        "logs:PutResourcePolicy",
+                                        "logs:PutLogEvents",
+                                        "logs:CreateLogStream",
+                                        "logs:GetLogDelivery",
+                                        "logs:ListLogDeliveries",
+                                        "logs:UpdateLogDelivery",
+                                        "logs:DeleteResourcePolicy",
+                                        "logs:PutResourcePolicy"
+                                    ],
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:PutLogEvents",
+                                        "logs:CreateLogStream"
+                                    ],
+                                    "Resource": [
+                                        { "Fn::GetAtt": ["FISLogGroup", "Arn"] },
+                                        { "Fn::Join": ["", [{ "Fn::GetAtt": ["FISLogGroup", "Arn"] }, ":*"]] }
+                                    ]
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "PolicyName": "FISCloudWatchAlarmsPolicy",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "cloudwatch:DescribeAlarms",
+                                        "cloudwatch:GetMetricData"
+                                    ],
+                                    "Resource": "*"
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "PolicyName": "FISEC2Policy",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "ec2:DescribeInstances",
+                                        "ec2:StopInstances",
+                                        "ec2:StartInstances",
+                                        "ec2:DescribeInstanceStatus"
+                                    ],
+                                    "Resource": "*"
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "FIS-Experiment-Role"
+                    }
+                ]
+            }
+        },
+        "HealthyHostAlarm": {
+            "Type": "AWS::CloudWatch::Alarm",
+            "Properties": {
+                "AlarmDescription": "Alert when healthy host count is critically low",
+                "MetricName": "HealthyHostCount",
+                "Namespace": "AWS/ApplicationELB",
+                "Statistic": "Average",
+                "Period": 60,
+                "EvaluationPeriods": 2,
+                "DatapointsToAlarm": 2,
+                "Threshold": 1,
+                "ComparisonOperator": "LessThanThreshold",
+                "TreatMissingData": "breaching",
+                "Dimensions": [
+                    {
+                        "Name": "LoadBalancer",
+                        "Value": { "Fn::ImportValue": "WebApplicationLoadBalancerFullName" }
+                    },
+                    {
+                        "Name": "TargetGroup",
+                        "Value": { "Fn::ImportValue": "WebTargetGroupFullName" }
+                    }
+                ]
+            }
+        },
+        "FISExperimentTemplate": {
+            "Type": "AWS::FIS::ExperimentTemplate",
+            "Properties": {
+                "Description": "Stop EC2 instances in specified AZ to test availability",
+                "Targets": {
+                    "WebInstances": {
+                        "ResourceType": "aws:ec2:instance",
+                        "ResourceTags": {
+                            "Name": "WEB-Instance"
+                        },
+                        "Filters": [
+                            {
+                                "Path": "Placement.AvailabilityZone",
+                                "Values": [{"Ref": "TargetAvailabilityZone"}]
+                            },
+                            {
+                                "Path": "State.Name",
+                                "Values": ["running"]
+                            }
+                        ],
+                        "SelectionMode": "ALL"
+                    },
+                    "WasInstances": {
+                        "ResourceType": "aws:ec2:instance",
+                        "ResourceTags": {
+                            "Name": "WAS-Instance"
+                        },
+                        "Filters": [
+                            {
+                                "Path": "Placement.AvailabilityZone",
+                                "Values": [{"Ref": "TargetAvailabilityZone"}]
+                            },
+                            {
+                                "Path": "State.Name",
+                                "Values": ["running"]
+                            }
+                        ],
+                        "SelectionMode": "ALL"
+                    }
+                },
+                "Actions": {
+                    "InitialWait": {
+                        "ActionId": "aws:fis:wait",
+                        "Parameters": {
+                            "duration": "PT3M"
+                        },
+                        "StartAfter": []
+                    },
+                    "StopWebInstances": {
+                        "ActionId": "aws:ec2:stop-instances",
+                        "Parameters": {
+                            "completeIfInstancesTerminated": "true",
+                            "startInstancesAfterDuration": "PT10M"
+                        },
+                        "Targets": {
+                            "Instances": "WebInstances"
+                        },
+                        "StartAfter": ["InitialWait"]
+                    },
+                    "StopWasInstances": {
+                        "ActionId": "aws:ec2:stop-instances",
+                        "Parameters": {
+                            "completeIfInstancesTerminated": "true",
+                            "startInstancesAfterDuration": "PT10M"
+                        },
+                        "Targets": {
+                            "Instances": "WasInstances"
+                        },
+                        "StartAfter": ["InitialWait"]
+                    }
+                },
+                "StopConditions": [
+                    {
+                        "Source": "aws:cloudwatch:alarm",
+                        "Value": { "Fn::GetAtt": ["HealthyHostAlarm", "Arn"] }
+                    }
+                ],
+                "RoleArn": { "Fn::GetAtt": ["FISRole", "Arn"] },
+                "Tags": {
+                    "Name": "AZ-Instance-Stop-Experiment"
+                },
+                "ExperimentOptions": {
+                    "AccountTargeting": "single-account"
+                },
+                "LogConfiguration": {
+                    "LogSchemaVersion": 2,
+                    "CloudWatchLogsConfiguration": {
+                        "LogGroupArn": { "Fn::GetAtt": ["FISLogGroup", "Arn"] }
+                    }
+                }
+            }
+        },
+        "FISLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+                "LogGroupName": "/aws/fis/experiment",
+                "RetentionInDays": 14
+            }
+        }
+    },
+    "Outputs": {
+        "FISExperimentTemplateArn": {
+            "Description": "ARN of the FIS experiment template",
+            "Value": { "Ref": "FISExperimentTemplate" },
+            "Export": {
+                "Name": "FISExperimentTemplateArn"
+            }
+        }
+    }
+} 

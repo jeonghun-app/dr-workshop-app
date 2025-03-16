@@ -180,6 +180,7 @@ EOF
 
 } || handle_error $LINENO
 
+
 # Configure firewall
 log "Configuring firewall..."
 {

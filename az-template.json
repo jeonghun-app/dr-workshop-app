@@ -1,0 +1,1059 @@
+{
+	"AWSTemplateFormatVersion": "2010-09-09",
+	"Parameters": {
+		"AmiId": {
+			"Type": "AWS::EC2::Image::Id",
+			"Description": "AMI ID for the EC2 instances"
+		},
+		"VpcId": {
+			"Type": "AWS::EC2::VPC::Id",
+			"Description": "VPC ID where resources will be created"
+		},
+		"PublicSubnetIds": {
+			"Type": "List<AWS::EC2::Subnet::Id>",
+			"Description": "List of Public Subnet IDs for ALB (minimum 2 subnets)"
+		},
+		"PrivateSubnetIds": {
+			"Type": "List<AWS::EC2::Subnet::Id>",
+			"Description": "List of Private Subnet IDs for application servers (minimum 2 subnets)"
+		},
+		"MySQLHost": {
+			"Type": "String",
+			"Description": "MySQL host address"
+		},
+		"MySQLPort": {
+			"Type": "String",
+			"Description": "MySQL port number",
+			"Default": "3306"
+		},
+		"MySQLDatabase": {
+			"Type": "String",
+			"Description": "MySQL database name",
+			"Default": "finance_app"
+		},
+		"MySQLUsername": {
+			"Type": "String",
+			"Description": "MySQL username",
+			"Default": "root"
+		},
+		"MySQLPassword": {
+			"Type": "String",
+			"NoEcho": true,
+			"Description": "MySQL password",
+			"Default": "qwer1234"
+		}
+	},
+	"Resources": {
+		"WASALBSecurityGroup": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"GroupDescription": "Security group for WAS ALB",
+				"VpcId": {
+					"Ref": "VpcId"
+				},
+				"SecurityGroupIngress": [
+					{
+						"IpProtocol": "tcp",
+						"FromPort": 5000,
+						"ToPort": 5000,
+						"CidrIp": "0.0.0.0/0"
+					}
+				],
+				"SecurityGroupEgress": [
+					{
+						"IpProtocol": "-1",
+						"FromPort": -1,
+						"ToPort": -1,
+						"CidrIp": "0.0.0.0/0"
+					}
+				],
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": "WAS-ALB-SecurityGroup"
+					}
+				]
+			}
+		},
+		"WebALBSecurityGroup": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"GroupDescription": "Security group for WEB ALB",
+				"VpcId": {
+					"Ref": "VpcId"
+				},
+				"SecurityGroupIngress": [
+					{
+						"IpProtocol": "tcp",
+						"FromPort": 80,
+						"ToPort": 80,
+						"CidrIp": "0.0.0.0/0"
+					}
+				],
+				"SecurityGroupEgress": [
+					{
+						"IpProtocol": "-1",
+						"FromPort": -1,
+						"ToPort": -1,
+						"CidrIp": "0.0.0.0/0"
+					}
+				],
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": "WEB-ALB-SecurityGroup"
+					}
+				]
+			}
+		},
+		"WASSecurityGroup": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"GroupDescription": "Security group for WAS servers",
+				"VpcId": {
+					"Ref": "VpcId"
+				},
+				"SecurityGroupIngress": [
+					{
+						"IpProtocol": "tcp",
+						"FromPort": 5000,
+						"ToPort": 5000,
+						"SourceSecurityGroupId": {
+							"Ref": "WASALBSecurityGroup"
+						}
+					},
+					{
+						"IpProtocol": "tcp",
+						"FromPort": 22,
+						"ToPort": 22,
+						"CidrIp": "0.0.0.0/0"
+					}
+				],
+				"SecurityGroupEgress": [
+					{
+						"IpProtocol": "-1",
+						"FromPort": -1,
+						"ToPort": -1,
+						"CidrIp": "0.0.0.0/0"
+					}
+				],
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": "WAS-SecurityGroup"
+					}
+				]
+			}
+		},
+		"WebSecurityGroup": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"GroupDescription": "Security group for Web servers",
+				"VpcId": {
+					"Ref": "VpcId"
+				},
+				"SecurityGroupIngress": [
+					{
+						"IpProtocol": "tcp",
+						"FromPort": 80,
+						"ToPort": 80,
+						"SourceSecurityGroupId": {
+							"Ref": "WebALBSecurityGroup"
+						}
+					},
+					{
+						"IpProtocol": "tcp",
+						"FromPort": 80,
+						"ToPort": 80,
+						"CidrIp": "0.0.0.0/0"
+					},
+					{
+						"IpProtocol": "tcp",
+						"FromPort": 22,
+						"ToPort": 22,
+						"CidrIp": "0.0.0.0/0"
+					}
+				],
+				"SecurityGroupEgress": [
+					{
+						"IpProtocol": "-1",
+						"FromPort": -1,
+						"ToPort": -1,
+						"CidrIp": "0.0.0.0/0"
+					}
+				],
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": "Web-SecurityGroup"
+					}
+				]
+			}
+		},
+		"WASLaunchTemplate": {
+			"Type": "AWS::EC2::LaunchTemplate",
+			"Properties": {
+				"LaunchTemplateData": {
+					"ImageId": {
+						"Ref": "AmiId"
+					},
+					"InstanceType": "t3.medium",
+					"NetworkInterfaces": [
+						{
+							"AssociatePublicIpAddress": true,
+							"DeviceIndex": 0,
+							"DeleteOnTermination": true,
+							"Groups": [{"Ref": "WASSecurityGroup"}]
+						}
+					],
+					"UserData": {
+						"Fn::Base64": {
+							"Fn::Join": [
+								"",
+								[
+									"#!/bin/bash\n",
+									"exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1\n",
+									"echo 'WAS UserData script started...'\n\n",
+									"# Tag instance with AZ information\n",
+									"INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)\n",
+									"REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)\n",
+									"AZ=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)\n",
+									"aws ec2 create-tags --region $REGION --resources $INSTANCE_ID --tags Key=AZ,Value=$AZ\n\n",
+									"# Create required directories\n",
+									"sudo mkdir -p /home/ubuntu/dr-workshop/WAS\n",
+									"sudo chown -R ubuntu:ubuntu /home/ubuntu/dr-workshop\n\n",
+									"# Create .env file with database connection info\n",
+									"sudo bash -c 'cat > /home/ubuntu/dr-workshop/WAS/.env << EOL\n",
+									"DB_HOST=",
+									{
+										"Ref": "MySQLHost"
+									},
+									"\n",
+									"DB_PORT=",
+									{
+										"Ref": "MySQLPort"
+									},
+									"\n",
+									"DB_USER=",
+									{
+										"Ref": "MySQLUsername"
+									},
+									"\n",
+									"DB_PASSWORD=",
+									{
+										"Ref": "MySQLPassword"
+									},
+									"\n",
+									"DB_NAME=",
+									{
+										"Ref": "MySQLDatabase"
+									},
+									"\n",
+									"ALLOWED_ORIGINS=*\n",
+									"JWT_SECRET=secret\n",
+									"EOL'\n\n",
+									"# Set permissions for .env file\n",
+									"sudo chmod 600 /home/ubuntu/dr-workshop/WAS/.env\n",
+									"sudo chown ubuntu:ubuntu /home/ubuntu/dr-workshop/WAS/.env\n\n",
+
+									"# Create a systemd service file\n",
+									"sudo bash -c 'cat > /etc/systemd/system/was-app.service << EOL\n",
+									"[Unit]\n",
+									"Description=WAS Application\n",
+									"After=network.target\n\n",
+									"[Service]\n",
+									"Type=simple\n",
+									"User=ubuntu\n",
+									"Group=ubuntu\n",
+									"WorkingDirectory=/home/ubuntu/dr-workshop/WAS\n",
+									"Environment=NODE_ENV=production\n",
+									"AmbientCapabilities=CAP_NET_BIND_SERVICE\n",
+									"ExecStart=/usr/bin/node index.js -p 5000\n",
+									"Restart=always\n",
+									"RestartSec=10\n\n",
+									"[Install]\n",
+									"WantedBy=multi-user.target\n",
+									"EOL'\n\n",
+									"# Set proper permissions\n",
+									"sudo setcap 'cap_net_bind_service=+ep' /usr/bin/node\n\n",
+									"# Start and enable the service\n",
+									"sudo systemctl daemon-reload\n",
+									"sudo systemctl enable was-app\n",
+									"sudo systemctl start was-app\n",
+									"echo 'WAS UserData script completed successfully'\n"
+								]
+							]
+						}
+					}
+				}
+			}
+		},
+		"WebLaunchTemplate": {
+			"Type": "AWS::EC2::LaunchTemplate",
+			"Properties": {
+				"LaunchTemplateData": {
+					"ImageId": {
+						"Ref": "AmiId"
+					},
+					"InstanceType": "t3.medium",
+					"NetworkInterfaces": [
+						{
+							"AssociatePublicIpAddress": true,
+							"DeviceIndex": 0,
+							"DeleteOnTermination": true,
+							"Groups": [{"Ref": "WebSecurityGroup"}]
+						}
+					],
+					"UserData": {
+						"Fn::Base64": {
+							"Fn::Join": [
+								"",
+								[
+									"#!/bin/bash\n",
+									"exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1\n",
+									"echo 'WEB UserData script started...'\n\n",
+									"# Tag instance with AZ information\n",
+									"INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)\n",
+									"REGION=$(curl -s http://169.254.169.254/latest/meta-data/placement/region)\n",
+									"AZ=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)\n",
+									"aws ec2 create-tags --region $REGION --resources $INSTANCE_ID --tags Key=AZ,Value=$AZ\n\n",
+									"# Check and kill any process using port 80\n",
+									"echo 'Checking for processes using port 80...'\n",
+									"if lsof -i:80 > /dev/null 2>&1; then\n",
+									"    echo 'Found process using port 80. Attempting to stop...'\n",
+									"    sudo fuser -k 80/tcp\n",
+									"    sleep 5\n",
+									"fi\n\n",
+									"# Update package list and install required packages\n",
+									"echo 'Updating package list and installing apache2...'\n",
+									"sudo apt-get update\n",
+									"sudo DEBIAN_FRONTEND=noninteractive apt-get install -y apache2\n\n",
+									"# Stop apache2 service before configuration\n",
+									"echo 'Stopping apache2 service...'\n",
+									"sudo systemctl stop apache2\n",
+									"sudo systemctl disable apache2\n",
+									"sleep 5\n\n",
+									"# Create required directories\n",
+									"echo 'Creating required directories...'\n",
+									"sudo mkdir -p /home/ubuntu/dr-workshop/WEB\n",
+									"sudo chown -R ubuntu:ubuntu /home/ubuntu/dr-workshop\n\n",
+									"# Configure Web Application\n",
+									"echo 'Configuring Web Application...'\n",
+									"cd /home/ubuntu/dr-workshop/web-app || exit 1\n",
+									"sudo -u ubuntu npm install\n\n",
+									"# Create environment file for web app\n",
+									"sudo -u ubuntu bash -c 'cat > /home/ubuntu/dr-workshop/web-app/.env << EOL\n",
+									"NEXT_PUBLIC_API_URL=http://",
+									{
+										"Fn::GetAtt": [
+											"WASApplicationLoadBalancer",
+											"DNSName"
+										]
+									},
+									":5000\n",
+									"EOL'\n",
+									"sudo chmod 600 /home/ubuntu/dr-workshop/web-app/.env\n",
+									"sudo -u ubuntu npm run build\n\n",
+									"# Create a systemd service file for Next.js app\n",
+									"echo 'Creating systemd service for Next.js app...'\n",
+									"sudo bash -c 'cat > /etc/systemd/system/nextjs-app.service << EOL\n",
+									"[Unit]\n",
+									"Description=Next.js Web Application\n",
+									"After=network.target\n\n",
+									"[Service]\n",
+									"Type=simple\n",
+									"User=ubuntu\n",
+									"Group=ubuntu\n",
+									"WorkingDirectory=/home/ubuntu/dr-workshop/web-app\n",
+									"Environment=NODE_ENV=production\n",
+									"Environment=PORT=3000\n",
+									"ExecStart=/usr/bin/npm run start\n",
+									"Restart=always\n",
+									"RestartSec=10\n\n",
+									"[Install]\n",
+									"WantedBy=multi-user.target\n",
+									"EOL'\n\n",
+									"# Start and enable the Next.js service\n",
+									"sudo systemctl daemon-reload\n",
+									"sudo systemctl enable nextjs-app\n",
+									"sudo systemctl start nextjs-app\n\n",
+									"# Configure Apache modules\n",
+									"echo 'Configuring Apache modules...'\n",
+									"sudo a2enmod proxy\n",
+									"sudo a2enmod proxy_http\n",
+									"sudo a2enmod rewrite\n\n",
+									"# Configure Apache virtual host\n",
+									"echo 'Configuring Apache virtual host...'\n",
+									"sudo bash -c 'cat > /etc/apache2/sites-available/000-default.conf << EOL\n",
+									"<VirtualHost *:80>\n",
+									"    ServerAdmin webmaster@localhost\n",
+									"    DocumentRoot /home/ubuntu/dr-workshop/WEB\n\n",
+									"    ProxyPreserveHost On\n\n",
+									"    # Health check endpoint\n",
+									"    <Location /health>\n",
+									"        SetHandler server-status\n",
+									"        Require all granted\n",
+									"        RewriteEngine On\n",
+									"        RewriteRule ^.*$ - [R=200,L]\n",
+									"    </Location>\n\n",
+									"    # API Proxy\n",
+									"    ProxyPass /api http://",
+									{
+										"Fn::GetAtt": [
+											"WASApplicationLoadBalancer",
+											"DNSName"
+										]
+									},
+									":5000/api\n",
+									"    ProxyPassReverse /api http://",
+									{
+										"Fn::GetAtt": [
+											"WASApplicationLoadBalancer",
+											"DNSName"
+										]
+									},
+									":5000/api\n\n",
+									"    # Frontend\n",
+									"    <Directory /home/ubuntu/dr-workshop/WEB>\n",
+									"        Options Indexes FollowSymLinks\n",
+									"        AllowOverride All\n",
+									"        Require all granted\n",
+									"    </Directory>\n\n",
+									"    # Proxy to Next.js app\n",
+									"    ProxyPass / http://localhost:3000/\n",
+									"    ProxyPassReverse / http://localhost:3000/\n\n",
+									"    ErrorLog \\${APACHE_LOG_DIR}/error.log\n",
+									"    CustomLog \\${APACHE_LOG_DIR}/access.log combined\n",
+									"</VirtualHost>\n",
+									"EOL'\n\n",
+									"# Test Apache configuration\n",
+									"echo 'Testing Apache configuration...'\n",
+									"if sudo apache2ctl configtest; then\n",
+									"    echo 'Apache configuration test passed'\n",
+									"    # Start Apache service\n",
+									"    echo 'Starting Apache service...'\n",
+									"    sudo systemctl enable apache2\n",
+									"    sudo systemctl start apache2\n",
+									"    for i in {1..5}; do\n",
+									"        if sudo systemctl is-active --quiet apache2; then\n",
+									"            echo 'Apache service started successfully'\n",
+									"            break\n",
+									"        fi\n",
+									"        echo 'Waiting for Apache to start... attempt $i'\n",
+									"        sleep 5\n",
+									"        sudo systemctl start apache2\n",
+									"    done\n",
+									"    if ! sudo systemctl is-active --quiet apache2; then\n",
+									"        echo 'ERROR: Apache service failed to start'\n",
+									"        exit 1\n",
+									"    fi\n",
+									"else\n",
+									"    echo 'Apache configuration test failed'\n",
+									"    exit 1\n",
+									"fi\n\n",
+									"echo 'WEB UserData script completed successfully'\n"
+								]
+							]
+						}
+					}
+				}
+			}
+		},
+		"WASAutoScalingGroup": {
+			"Type": "AWS::AutoScaling::AutoScalingGroup",
+			"Properties": {
+				"VPCZoneIdentifier": {
+					"Ref": "PublicSubnetIds"
+				},
+				"LaunchTemplate": {
+					"LaunchTemplateId": {
+						"Ref": "WASLaunchTemplate"
+					},
+					"Version": {
+						"Fn::GetAtt": [
+							"WASLaunchTemplate",
+							"LatestVersionNumber"
+						]
+					}
+				},
+				"MinSize": 2,
+				"MaxSize": 4,
+				"DesiredCapacity": 2,
+				"HealthCheckType": "ELB",
+				"HealthCheckGracePeriod": 300,
+				"TargetGroupARNs": [
+					{
+						"Ref": "WASTargetGroup"
+					}
+				],
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": "WAS-Instance",
+						"PropagateAtLaunch": true
+					}
+				]
+			}
+		},
+		"WebAutoScalingGroup": {
+			"Type": "AWS::AutoScaling::AutoScalingGroup",
+			"DependsOn": [
+				"WASAutoScalingGroup"
+			],
+			"Properties": {
+				"VPCZoneIdentifier": {
+					"Ref": "PublicSubnetIds"
+				},
+				"LaunchTemplate": {
+					"LaunchTemplateId": {
+						"Ref": "WebLaunchTemplate"
+					},
+					"Version": {
+						"Fn::GetAtt": [
+							"WebLaunchTemplate",
+							"LatestVersionNumber"
+						]
+					}
+				},
+				"MinSize": 2,
+				"MaxSize": 4,
+				"DesiredCapacity": 2,
+				"HealthCheckType": "ELB",
+				"HealthCheckGracePeriod": 300,
+				"TargetGroupARNs": [
+					{
+						"Ref": "WebTargetGroup"
+					}
+				],
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": "WEB-Instance",
+						"PropagateAtLaunch": true
+					}
+				]
+			}
+		},
+		"WASApplicationLoadBalancer": {
+			"Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+			"Properties": {
+				"Name": {
+					"Fn::Join": [
+						"-",
+						[
+							"DRS-WAS-ALB",
+							{
+								"Fn::Select": [
+									0,
+									{
+										"Fn::Split": [
+											"-",
+											{
+												"Fn::Select": [
+													2,
+													{
+														"Fn::Split": [
+															"/",
+															{
+																"Ref": "AWS::StackId"
+															}
+														]
+													}
+												]
+											}
+										]
+									}
+								]
+							}
+						]
+					]
+				},
+				"Scheme": "internet-facing",
+				"LoadBalancerAttributes": [
+					{
+						"Key": "idle_timeout.timeout_seconds",
+						"Value": "60"
+					},
+					{
+						"Key": "load_balancing.cross_zone.enabled",
+						"Value": "true"
+					}
+				],
+				"Subnets": {
+					"Ref": "PublicSubnetIds"
+				},
+				"SecurityGroups": [
+					{
+						"Ref": "WASALBSecurityGroup"
+					}
+				],
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": "DRS-WAS-ALB"
+					}
+				]
+			}
+		},
+		"WebApplicationLoadBalancer": {
+			"Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+			"Properties": {
+				"Name": {
+					"Fn::Join": [
+						"-",
+						[
+							"DRS-WEB-ALB",
+							{
+								"Fn::Select": [
+									0,
+									{
+										"Fn::Split": [
+											"-",
+											{
+												"Fn::Select": [
+													2,
+													{
+														"Fn::Split": [
+															"/",
+															{
+																"Ref": "AWS::StackId"
+															}
+														]
+													}
+												]
+											}
+										]
+									}
+								]
+							}
+						]
+					]
+				},
+				"Scheme": "internet-facing",
+				"LoadBalancerAttributes": [
+					{
+						"Key": "idle_timeout.timeout_seconds",
+						"Value": "60"
+					},
+					{
+						"Key": "load_balancing.cross_zone.enabled",
+						"Value": "true"
+					}
+				],
+				"Subnets": {
+					"Ref": "PublicSubnetIds"
+				},
+				"SecurityGroups": [
+					{
+						"Ref": "WebALBSecurityGroup"
+					}
+				],
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": "DRS-WEB-ALB"
+					}
+				]
+			}
+		},
+		"WASTargetGroup": {
+			"Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+			"Properties": {
+				"Name": {
+					"Fn::Join": [
+						"-",
+						[
+							"WAS-TG",
+							{
+								"Fn::Select": [
+									0,
+									{
+										"Fn::Split": [
+											"-",
+											{
+												"Fn::Select": [
+													2,
+													{
+														"Fn::Split": [
+															"/",
+															{
+																"Ref": "AWS::StackId"
+															}
+														]
+													}
+												]
+											}
+										]
+									}
+								]
+							}
+						]
+					]
+				},
+				"Port": 5000,
+				"Protocol": "HTTP",
+				"TargetType": "instance",
+				"VpcId": {
+					"Ref": "VpcId"
+				},
+				"HealthCheckPath": "/health",
+				"HealthCheckIntervalSeconds": 30,
+				"HealthCheckTimeoutSeconds": 5,
+				"HealthyThresholdCount": 2,
+				"UnhealthyThresholdCount": 2,
+				"TargetGroupAttributes": [
+					{
+						"Key": "deregistration_delay.timeout_seconds",
+						"Value": "30"
+					},
+					{
+						"Key": "stickiness.enabled",
+						"Value": "true"
+					},
+					{
+						"Key": "stickiness.type",
+						"Value": "lb_cookie"
+					},
+					{
+						"Key": "stickiness.lb_cookie.duration_seconds",
+						"Value": "86400"
+					}
+				],
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": "WAS-TargetGroup"
+					}
+				]
+			}
+		},
+		"WebTargetGroup": {
+			"Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+			"DependsOn": [
+				"WASTargetGroup"
+			],
+			"Properties": {
+				"Name": {
+					"Fn::Join": [
+						"-",
+						[
+							"WEB-TG",
+							{
+								"Fn::Select": [
+									0,
+									{
+										"Fn::Split": [
+											"-",
+											{
+												"Fn::Select": [
+													2,
+													{
+														"Fn::Split": [
+															"/",
+															{
+																"Ref": "AWS::StackId"
+															}
+														]
+													}
+												]
+											}
+										]
+									}
+								]
+							}
+						]
+					]
+				},
+				"Port": 80,
+				"Protocol": "HTTP",
+				"TargetType": "instance",
+				"VpcId": {
+					"Ref": "VpcId"
+				},
+				"HealthCheckPath": "/health",
+				"HealthCheckIntervalSeconds": 30,
+				"HealthCheckTimeoutSeconds": 5,
+				"HealthyThresholdCount": 2,
+				"UnhealthyThresholdCount": 2,
+				"HealthCheckPort": "80",
+				"Matcher": {
+					"HttpCode": "200"
+				},
+				"TargetGroupAttributes": [
+					{
+						"Key": "deregistration_delay.timeout_seconds",
+						"Value": "30"
+					}
+				],
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": "WEB-TargetGroup"
+					}
+				]
+			}
+		},
+		"WASListener": {
+			"Type": "AWS::ElasticLoadBalancingV2::Listener",
+			"Properties": {
+				"LoadBalancerArn": {
+					"Ref": "WASApplicationLoadBalancer"
+				},
+				"Port": 5000,
+				"Protocol": "HTTP",
+				"DefaultActions": [
+					{
+						"Type": "forward",
+						"TargetGroupArn": {
+							"Ref": "WASTargetGroup"
+						}
+					}
+				]
+			}
+		},
+		"WebListener": {
+			"Type": "AWS::ElasticLoadBalancingV2::Listener",
+			"DependsOn": [
+				"WASListener"
+			],
+			"Properties": {
+				"LoadBalancerArn": {
+					"Ref": "WebApplicationLoadBalancer"
+				},
+				"Port": 80,
+				"Protocol": "HTTP",
+				"DefaultActions": [
+					{
+						"Type": "forward",
+						"TargetGroupArn": {
+							"Ref": "WebTargetGroup"
+						}
+					}
+				]
+			}
+		},
+		"OperatorSecurityGroup": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"GroupDescription": "Security group for Operator EC2",
+				"VpcId": {
+					"Ref": "VpcId"
+				},
+				"SecurityGroupIngress": [
+					{
+						"IpProtocol": "tcp",
+						"FromPort": 3000,
+						"ToPort": 3000,
+						"CidrIp": "0.0.0.0/0"
+					},
+					{
+						"IpProtocol": "tcp",
+						"FromPort": 22,
+						"ToPort": 22,
+						"CidrIp": "0.0.0.0/0"
+					}
+				],
+				"SecurityGroupEgress": [
+					{
+						"IpProtocol": "-1",
+						"FromPort": -1,
+						"ToPort": -1,
+						"CidrIp": "0.0.0.0/0"
+					}
+				],
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": "Operator-SecurityGroup"
+					}
+				]
+			}
+		},
+		"OperatorRole": {
+			"Type": "AWS::IAM::Role",
+			"Properties": {
+				"AssumeRolePolicyDocument": {
+					"Version": "2012-10-17",
+					"Statement": [
+						{
+							"Effect": "Allow",
+							"Principal": {
+								"Service": "ec2.amazonaws.com"
+							},
+							"Action": "sts:AssumeRole"
+						}
+					]
+				},
+				"ManagedPolicyArns": [
+					"arn:aws:iam::aws:policy/AdministratorAccess"
+				],
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": "Operator-Role"
+					}
+				]
+			}
+		},
+		"OperatorInstanceProfile": {
+			"Type": "AWS::IAM::InstanceProfile",
+			"Properties": {
+				"Path": "/",
+				"Roles": [
+					{
+						"Ref": "OperatorRole"
+					}
+				]
+			}
+		},
+		"OperatorInstance": {
+			"Type": "AWS::EC2::Instance",
+			"Properties": {
+				"ImageId": {
+					"Ref": "AmiId"
+				},
+				"InstanceType": "t3.medium",
+				"IamInstanceProfile": {
+					"Ref": "OperatorInstanceProfile"
+				},
+				"SubnetId": {
+					"Fn::Select": [
+						0,
+						{
+							"Ref": "PublicSubnetIds"
+						}
+					]
+				},
+				"SecurityGroupIds": [
+					{
+						"Ref": "OperatorSecurityGroup"
+					}
+				],
+				"Tags": [
+					{
+						"Key": "Name",
+						"Value": "Operator-Instance"
+					}
+				],
+				"UserData": {
+					"Fn::Base64": {
+						"Fn::Join": [
+							"",
+							[
+								"#!/bin/bash\n",
+								"exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1\n",
+								"echo 'Operator UserData script started...'\n\n",
+								
+								"# Update and install required packages\n",
+								"sudo apt-get update\n",
+								"sudo apt-get install -y git\n",
+								
+								"# Install Node.js\n",
+								"curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -\n",
+								"sudo apt-get install -y nodejs\n",
+								
+								"# Create directory and set permissions\n",
+								"sudo mkdir -p /home/ubuntu/dr-operator\n",
+								"sudo chown -R ubuntu:ubuntu /home/ubuntu/dr-operator\n",
+								
+								"# Clone the repository\n",
+								"cd /home/ubuntu/dr-operator\n",
+								"sudo -u ubuntu git clone https://github.com/jeonghun-app/dr-operator-app.git .\n",
+								
+								"# Install dependencies\n",
+								"sudo -u ubuntu npm install\n",
+								
+								"# Create systemd service file\n",
+								"sudo bash -c 'cat > /etc/systemd/system/operator-app.service << EOL\n",
+								"[Unit]\n",
+								"Description=Operator Application\n",
+								"After=network.target\n\n",
+								"[Service]\n",
+								"Type=simple\n",
+								"User=ubuntu\n",
+								"Group=ubuntu\n",
+								"WorkingDirectory=/home/ubuntu/dr-operator\n",
+								"Environment=NODE_ENV=development\n",
+								"ExecStart=/usr/bin/npm run dev\n",
+								"Restart=always\n",
+								"RestartSec=10\n\n",
+								"[Install]\n",
+								"WantedBy=multi-user.target\n",
+								"EOL'\n\n",
+								
+								"# Start and enable the service\n",
+								"sudo systemctl daemon-reload\n",
+								"sudo systemctl enable operator-app\n",
+								"sudo systemctl start operator-app\n",
+								
+								"echo 'Operator UserData script completed successfully'\n"
+							]
+						]
+					}
+				}
+			}
+		}
+	},
+	"Outputs": {
+		"WASLoadBalancerDNS": {
+			"Description": "DNS name of the WAS load balancer",
+			"Value": {
+				"Fn::GetAtt": [
+					"WASApplicationLoadBalancer",
+					"DNSName"
+				]
+			},
+			"Export": {
+				"Name": "WASLoadBalancerDNS"
+			}
+		},
+		"WebLoadBalancerDNS": {
+			"Description": "DNS name of the WEB load balancer",
+			"Value": {
+				"Fn::GetAtt": [
+					"WebApplicationLoadBalancer",
+					"DNSName"
+				]
+			},
+			"Export": {
+				"Name": "WebLoadBalancerDNS"
+			}
+		},
+		"WebApplicationLoadBalancerFullName": {
+			"Description": "Full name of the WEB load balancer",
+			"Value": {
+				"Fn::GetAtt": [
+					"WebApplicationLoadBalancer",
+					"LoadBalancerFullName"
+				]
+			},
+			"Export": {
+				"Name": "WebApplicationLoadBalancerFullName"
+			}
+		},
+		"WebTargetGroupFullName": {
+			"Description": "Full name of the WEB target group",
+			"Value": {
+				"Fn::GetAtt": [
+					"WebTargetGroup",
+					"TargetGroupFullName"
+				]
+			},
+			"Export": {
+				"Name": "WebTargetGroupFullName"
+			}
+		},
+		"OperatorInstancePublicIP": {
+			"Description": "Public IP address of the Operator instance",
+			"Value": {
+				"Fn::GetAtt": [
+					"OperatorInstance",
+					"PublicIp"
+				]
+			},
+			"Export": {
+				"Name": "OperatorInstancePublicIP"
+			}
+		}
+	}
+}
